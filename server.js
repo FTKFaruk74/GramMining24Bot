@@ -2,7 +2,7 @@ const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const TelegramBot = require('node-telegram-bot-api');
 
-const token = 'YOUR_TELEGRAM_BOT_TOKEN'; // BotFather থেকে পাওয়া টোকেন
+const token = 'YOUR_TELEGRAM_BOT_TOKEN'; // আপনার BotFather থেকে পাওয়া টেলিগ্রাম টোকেন
 const bot = new TelegramBot(token, { polling: true });
 
 const supabaseUrl = 'YOUR_SUPABASE_URL';
@@ -18,9 +18,9 @@ bot.onText(/\/start(?: (.+))?/, async (msg, match) => {
     const userId = msg.from.id;
     const firstName = msg.from.first_name || "User";
     const username = msg.from.username || "";
-    const startPayload = match[1]; // রেফারেল কোড ধরার জন্য যেমন: ref_123456
+    const startPayload = match[1]; // রেফারেল কোড ধরার জন্য যেমন: ref_12345678
 
-    // চেক করুন ইউজার ডাটাবেজে আছে কি না
+    // চেক করুন ইউজার ডাটাবেজে আগে থেকেই আছে কি না
     let { data: existingUser } = await supabase.from('users').select('*').eq('id', userId).single();
 
     if (!existingUser) {
@@ -29,21 +29,37 @@ bot.onText(/\/start(?: (.+))?/, async (msg, match) => {
             referredBy = startPayload.replace('ref_', '');
         }
 
-        // নতুন ইউজার ডাটাবেজে সেভ করুন
+        // নতুন ইউজার ডাটাবেজে সেভ করুন (নতুন লজিক অনুযায়ী আপডেট করা কলামসহ)
         await supabase.from('users').insert([{
             id: userId,
             username: username,
             first_name: firstName,
             gram_balance: 0.0,
+            unclaimed_gram: 0.0,
             main_usd_balance: 0.0,
-            referred_by: referredBy
+            tasks_completed: 0,
+            referred_by: referredBy,
+            referrals_json: []
         }]);
+
+        // যদি কেউ রেফারেলের মাধ্যমে এসে থাকে, তবে যার লিংকে এসেছে তার রেফারেল লিস্টে এই ইউজারকে যুক্ত করা হবে
+        if (referredBy && referredBy != userId.toString()) {
+            let { data: refUser } = await supabase.from('users').select('referrals_json').eq('id', referredBy).single();
+            if (refUser) {
+                let list = refUser.referrals_json ? refUser.referrals_json : [];
+                // ডুপ্লিকেট এন্ট্রি এড়াতে চেক করা
+                if (!list.some(item => item.id == userId)) {
+                    list.push({ name: firstName, id: userId });
+                    await supabase.from('users').update({ referrals_json: list }).eq('id', referredBy);
+                }
+            }
+        }
     }
 
     // মিনি অ্যাপ ওপেন করার বাটনসহ মেসেজ পাঠানো
-    const webAppUrl = 'https://your-vercel-app-url.vercel.app'; // আপনার ভার্সেল লিংক
+    const webAppUrl = 'https://your-vercel-app-url.vercel.app'; // আপনার ভার্সেল লাইভ লিংক
     
-    bot.sendMessage(chatId, `🤖 **Welcome to GRAM Mining Bot!**\n\nStart mining your gems directly on Telegram with zero investment.`, {
+    bot.sendMessage(chatId, `🤖 **Welcome to GRAM Mining Bot!**\n\nComplete the required tasks to unlock live mining and earn rewards.`, {
         parse_mode: 'Markdown',
         reply_markup: {
             inline_keyboard: [
