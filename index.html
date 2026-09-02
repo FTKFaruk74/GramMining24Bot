@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GRAM Mining Bot</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --accent: #38bdf8;
+            --text-color: #f8fafc;
+            --text-secondary: #94a3b8;
+            --success: #22c55e;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-color); display: flex; flex-direction: column; min-height: 100vh; max-width: 480px; margin: 0 auto; position: relative; }
+        
+        header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; background: var(--card-bg); border-bottom: 1px solid #334155; }
+        .user-welcome { font-size: 16px; font-weight: 600; }
+        .lang-select select { background: #0f172a; color: var(--text-color); border: 1px solid #334155; padding: 5px 10px; border-radius: 8px; outline: none; }
+
+        .content { flex: 1; padding: 20px; padding-bottom: 90px; overflow-y: auto; }
+        .section { display: none; }
+        .section.active { display: block; }
+
+        .mining-card { background: linear-gradient(135deg, #1e293b, #0f172a); border: 1px solid #334155; border-radius: 20px; padding: 25px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.3); margin-top: 15px; }
+        .mining-title { font-size: 14px; color: var(--text-secondary); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
+        .gram-amount { font-size: 32px; font-weight: bold; color: var(--accent); margin-bottom: 5px; }
+        .usd-equivalent { font-size: 14px; color: var(--success); margin-bottom: 20px; }
+        
+        .balance-box { background: #1e293b; border: 1px solid #334155; padding: 20px; border-radius: 16px; margin-top: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .swap-btn { background: var(--accent); color: #0f172a; border: none; padding: 10px 18px; border-radius: 10px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .swap-btn:disabled { background: #475569; color: #94a3b8; cursor: not-allowed; }
+
+        .task-card { background: var(--card-bg); border: 1px solid #334155; border-radius: 12px; padding: 15px; margin-bottom: 15px; display: flex; flex-direction: column; gap: 10px; }
+        .task-info { display: flex; justify-content: space-between; align-items: center; }
+        .task-action-btn { background: #334155; color: var(--text-color); border: none; padding: 8px 15px; border-radius: 8px; cursor: pointer; text-decoration: none; font-size: 14px; text-align: center; }
+        .task-action-btn.completed { background: var(--success); color: white; pointer-events: none; }
+
+        .refer-box { background: var(--card-bg); padding: 20px; border-radius: 15px; text-align: center; border: 1px solid #334155; }
+        .ref-link-input { width: 100%; padding: 10px; background: #0f172a; border: 1px solid #334155; color: var(--text-color); border-radius: 8px; margin: 10px 0; text-align: center; }
+        .ref-list { margin-top: 20px; text-align: left; }
+
+        .payout-form { background: var(--card-bg); padding: 20px; border-radius: 15px; border: 1px solid #334155; }
+        .payout-form input { width: 100%; padding: 12px; background: #0f172a; border: 1px solid #334155; color: var(--text-color); border-radius: 8px; margin: 10px 0 20px 0; outline: none; }
+        .submit-payout { width: 100%; background: var(--success); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .submit-payout:disabled { background: #475569; cursor: not-allowed; }
+
+        nav { position: fixed; bottom: 0; left: 0; right: 0; max-width: 480px; margin: 0 auto; background: var(--card-bg); display: flex; justify-content: space-around; padding: 12px 0; border-top: 1px solid #334155; z-index: 1000; }
+        .nav-item { background: none; border: none; color: var(--text-secondary); display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; cursor: pointer; flex: 1; }
+        .nav-item.active { color: var(--accent); }
+        .nav-item i { font-size: 18px; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="user-welcome" id="welcomeUser">Welcome, User</div>
+        <div class="lang-container">
+            <select id="langSelect" onchange="changeLanguage()">
+                <option value="en">English</option>
+                <option value="bn">বাংলা</option>
+                <option value="ru">Русский</option>
+                <option value="ur">اردو</option>
+            </select>
+        </div>
+    </header>
+
+    <div class="content">
+        <div id="home" class="section active">
+            <div class="mining-card">
+                <div class="mining-title" data-i18n="miningTitle">Live GRAM Mining</div>
+                <div class="gram-amount" id="gramBalance">0.00000000 GRAM</div>
+                <div class="usd-equivalent" id="usdEquivalent">≈ $0.0000 USDT</div>
+            </div>
+
+            <div class="balance-box">
+                <div>
+                    <div style="font-size: 12px; color: var(--text-secondary);" data-i18n="mainBalLabel">Main Balance</div>
+                    <div id="mainUsdBalance" style="font-size: 20px; font-weight: bold; color: var(--success);">$0.00 USDT</div>
+                </div>
+                <button class="swap-btn" id="swapBtn" onclick="swapTokens()" disabled data-i18n="swapBtn">Swap to USDT</button>
+            </div>
+            <p style="font-size: 11px; color: var(--text-secondary); text-align: center; margin-top: 10px;" data-i18n="swapNote">Min. Swap: 0.50$ worth of GRAM</p>
+        </div>
+
+        <div id="tasks" class="section">
+            <h3 style="margin-bottom: 15px;" data-i18n="tasksHeading">Available Tasks</h3>
+            <div id="taskList"></div>
+        </div>
+
+        <div id="refer" class="section">
+            <div class="refer-box">
+                <h3 data-i18n="referHeading">Invite & Earn</h3>
+                <p style="font-size: 13px; color: var(--text-secondary); margin-top: 5px;" data-i18n="referSub">Get bonuses for every friend you invite!</p>
+                <input type="text" id="refLinkInput" class="ref-link-input" readonly>
+                <button class="swap-btn" style="width: 100%; padding: 10px;" onclick="copyRefLink()" data-i18n="copyBtn">Copy Referral Link</button>
+                
+                <div class="ref-list">
+                    <h4 style="font-size: 14px; margin-bottom: 10px;"><span data-i18n="refListTitle">Total Referrals:</span> <span id="refCount">0</span></h4>
+                </div>
+            </div>
+        </div>
+
+        <div id="payout" class="section">
+            <div class="payout-form">
+                <h3 style="margin-bottom: 15px;" data-i18n="payoutHeading">Withdraw USDT</h3>
+                <p style="font-size: 12px; color: var(--text-secondary);" data-i18n="payoutNetwork">Network: Binance Smart Chain (BEP20)</p>
+                
+                <label style="font-size: 14px; display: block; margin-top: 15px;" data-i18n="walletLabel">BEP20 Wallet Address</label>
+                <input type="text" id="bep20Address" placeholder="0x...">
+                
+                <label style="font-size: 14px; display: block;" data-i18n="amountLabel">Amount to Withdraw (USDT)</label>
+                <input type="number" id="withdrawAmount" placeholder="1.00">
+                
+                <button class="submit-payout" id="withdrawBtnElement" onclick="requestPayout()" disabled data-i18n="withdrawBtn">Submit Withdrawal (Min $1)</button>
+            </div>
+        </div>
+    </div>
+
+    <nav>
+        <button class="nav-item active" onclick="switchTab('home', this)">
+            <i class="fas fa-home"></i>
+            <span data-i18n="navHome">Home</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('tasks', this)">
+            <i class="fas fa-tasks"></i>
+            <span data-i18n="navTasks">Tasks</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('refer', this)">
+            <i class="fas fa-users"></i>
+            <span data-i18n="navRefer">Refer</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('payout', this)">
+            <i class="fas fa-wallet"></i>
+            <span data-i18n="navPayout">Payout</span>
+        </button>
+    </nav>
+
+    <script>
+        // Supabase Configuration
+        const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+        const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+
+        let currentUser = {
+            id: 12345678,
+            username: "jahidshuvo",
+            first_name: "Jahid",
+            gram_balance: 0.0,
+            main_usd_balance: 0.0
+        };
+
+        if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+            currentUser.id = tg.initDataUnsafe.user.id;
+            currentUser.username = tg.initDataUnsafe.user.username || "user_" + currentUser.id;
+            currentUser.first_name = tg.initDataUnsafe.user.first_name || "User";
+        }
+        document.getElementById('welcomeUser').innerText = `Welcome, ${currentUser.first_name}`;
+
+        const GRAM_TO_USD = 1.32;
+        const DAILY_USD_RATE = 0.100000;
+        const PER_SECOND_GRAM = (DAILY_USD_RATE / 86400) / GRAM_TO_USD;
+
+        let tasks = [
+            { id: 1, title: "Join Telegram Channel", link: "https://t.me/GRAMMining24Bot", status: "pending", timer: 15 },
+            { id: 2, title: "Subscribe YouTube Channel", link: "https://youtube.com", status: "pending", timer: 15 },
+            { id: 3, title: "Follow Twitter / X", link: "https://twitter.com", status: "pending", timer: 15 },
+            { id: 4, title: "Join Community Chat", link: "https://t.me/GRAMMining24Bot", status: "pending", timer: 15 },
+            { id: 5, title: "Visit Partner Website", link: "https://google.com", status: "pending", timer: 15 }
+        ];
+
+        async function initUserInDB() {
+            let { data, error } = await _supabase.from('users').select('*').eq('id', currentUser.id).single();
+            if (!data) {
+                await _supabase.from('users').insert([{
+                    id: currentUser.id,
+                    username: currentUser.username,
+                    first_name: currentUser.first_name,
+                    gram_balance: 0.0,
+                    main_usd_balance: 0.0
+                }]);
+            } else {
+                currentUser.gram_balance = parseFloat(data.gram_balance);
+                currentUser.main_usd_balance = parseFloat(data.main_usd_balance);
+            }
+            updateUI();
+        }
+
+        async function syncToDB() {
+            await _supabase.from('users').update({
+                gram_balance: currentUser.gram_balance,
+                main_usd_balance: currentUser.main_usd_balance
+            }).eq('id', currentUser.id);
+        }
+
+        const botUsername = "GRAMMining24Bot";
+        const refLink = `https://t.me/${botUsername}?start=ref_${currentUser.id}`;
+        document.getElementById('refLinkInput').value = refLink;
+
+        function copyRefLink() {
+            navigator.clipboard.writeText(refLink);
+            alert("Referral link copied!");
+        }
+
+        // Live Mining Loop
+        setInterval(() => {
+            currentUser.gram_balance += PER_SECOND_GRAM;
+            updateUI();
+            syncToDB();
+        }, 1000);
+
+        function updateUI() {
+            document.getElementById('gramBalance').innerText = `${currentUser.gram_balance.toFixed(8)} GRAM`;
+            const currentGramUsd = currentUser.gram_balance * GRAM_TO_USD;
+            document.getElementById('usdEquivalent').innerText = `≈ $${currentGramUsd.toFixed(4)} USDT`;
+            document.getElementById('mainUsdBalance').innerText = `$${currentUser.main_usd_balance.toFixed(2)} USDT`;
+            
+            if (currentGramUsd >= 0.50) {
+                document.getElementById('swapBtn').removeAttribute('disabled');
+            } else {
+                document.getElementById('swapBtn').setAttribute('disabled', 'true');
+            }
+
+            if (currentUser.main_usd_balance >= 1.00) {
+                document.getElementById('withdrawBtnElement').removeAttribute('disabled');
+            } else {
+                document.getElementById('withdrawBtnElement').setAttribute('disabled', 'true');
+            }
+        }
+
+        async function swapTokens() {
+            let currentGramUsd = currentUser.gram_balance * GRAM_TO_USD;
+            if (currentGramUsd >= 0.50) {
+                currentUser.main_usd_balance += currentGramUsd;
+                currentUser.gram_balance = 0;
+                await syncToDB();
+                updateUI();
+                alert("Successfully swapped GRAM to USDT Main Balance!");
+            } else {
+                alert("Minimum 0.50$ worth of GRAM is required to swap.");
+            }
+        }
+
+        function renderTasks() {
+            const taskListContainer = document.getElementById('taskList');
+            taskListContainer.innerHTML = '';
+            tasks.forEach(task => {
+                let btnText = task.status === 'completed' ? 'Done' : (task.timer < 15 && task.timer > 0 ? `Waiting (${task.timer}s)` : 'Start Task');
+                let btnClass = task.status === 'completed' ? 'task-action-btn completed' : 'task-action-btn';
+                
+                taskListContainer.innerHTML += `
+                    <div class="task-card">
+                        <div class="task-info">
+                            <span>${task.title}</span>
+                            <span style="font-size: 12px; color: var(--accent);">+0.05 USDT</span>
+                        </div>
+                        <button class="${btnClass}" id="task-btn-${task.id}" onclick="startTask(${task.id}, '${task.link}')">${btnText}</button>
+                    </div>
+                `;
+            });
+        }
+
+        function startTask(id, url) {
+            let task = tasks.find(t => t.id === id);
+            if (task.status === 'completed' || task.timer < 15) return;
+
+            window.open(url, '_blank');
+
+            let btn = document.getElementById(`task-btn-${id}`);
+            let interval = setInterval(async () => {
+                task.timer--;
+                btn.innerText = `Waiting (${task.timer}s)`;
+                btn.style.pointerEvents = 'none';
+                
+                if (task.timer <= 0) {
+                    clearInterval(interval);
+                    task.status = 'completed';
+                    btn.innerText = 'Done';
+                    btn.classList.add('completed');
+                    currentUser.main_usd_balance += 0.05;
+                    await syncToDB();
+                    updateUI();
+                }
+            }, 1000);
+        }
+
+        async function requestPayout() {
+            const address = document.getElementById('bep20Address').value;
+            const amount = parseFloat(document.getElementById('withdrawAmount').value);
+
+            if (!address || address.length < 10) {
+                alert("Please enter a valid BEP20 address.");
+                return;
+            }
+            if (isNaN(amount) || amount < 1.00) {
+                alert("Minimum payout amount is 1.00 USDT.");
+                return;
+            }
+            if (amount > currentUser.main_usd_balance) {
+                alert("Insufficient main balance.");
+                return;
+            }
+
+            currentUser.main_usd_balance -= amount;
+            await syncToDB();
+            updateUI();
+            alert(`Withdrawal request of $${amount} USDT submitted successfully to BEP20 network!`);
+            document.getElementById('bep20Address').value = '';
+            document.getElementById('withdrawAmount').value = '';
+        }
+
+        function switchTab(sectionId, btnElement) {
+            document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+            
+            document.getElementById(sectionId).classList.add('active');
+            btnElement.classList.add('active');
+        }
+
+        const translations = {
+            en: { miningTitle: "Live GRAM Mining", mainBalLabel: "Main Balance", swapBtn: "Swap to USDT", swapNote: "Min. Swap: 0.50$ worth of GRAM", tasksHeading: "Available Tasks", referHeading: "Invite & Earn", referSub: "Get bonuses for every friend you invite!", copyBtn: "Copy Referral Link", refListTitle: "Total Referrals:", payoutHeading: "Withdraw USDT", payoutNetwork: "Network: Binance Smart Chain (BEP20)", walletLabel: "BEP20 Wallet Address", amountLabel: "Amount to Withdraw (USDT)", withdrawBtn: "Submit Withdrawal (Min $1)" },
+            bn: { miningTitle: "লাইভ গ্রাম মাইনিং", mainBalLabel: "মেইন ব্যালেন্স", swapBtn: "ইউএসডিটি সোয়াপ করুন", swapNote: "মিনিমাম সোয়াপ: ০.৫০ ডলার সমপরিমাণ গ্রাম", tasksHeading: "টাস্কসমূহ", referHeading: "রেফার করে আয় করুন", referSub: "প্রতিটি রেফারে আকর্ষণীয় বোনাস নিন!", copyBtn: "রেফারেল লিংক কপি করুন", refListTitle: "মোট রেফার:", payoutHeading: "ইউএসডিটি উইথড্র", payoutNetwork: "নেটওয়ার্ক: বাইনান্স স্মার্ট চেইন (BEP20)", walletLabel: "বিইপি২০ ওয়ালেট এড্রেস", amountLabel: "উইথড্র করার পরিমাণ (USDT)", withdrawBtn: "উইথড্র রিকোয়েস্ট পাঠান (মিনিমাম ১ ডলার)" },
+            ru: { miningTitle: "Майнинг GRAM в реальном времени", mainBalLabel: "Основной баланс", swapBtn: "Обменять на USDT", swapNote: "Мин. обмен: на сумму 0.50$ GRAM", tasksHeading: "Доступные задания", referHeading: "Приглашай и зарабатывай", referSub: "Получайте бонусы за каждого друга!", copyBtn: "Копировать реферальную ссылку", refListTitle: "Всего рефералов:", payoutHeading: "Вывод USDT", payoutNetwork: "Сеть: Binance Smart Chain (BEP20)", walletLabel: "Адрес кошелька BEP20", amountLabel: "Сумма для вывода (USDT)", withdrawBtn: "Запросить вывод (мин. 1$)" },
+            ur: { miningTitle: "لائیو گرام مائننگ", mainBalLabel: "مین بیلنس", swapBtn: "USDT میں تبدیل کریں", swapNote: "کم از کم تبادلہ: 0.50$ گرام", tasksHeading: "دستیاب ٹاسکس", referHeading: "دعوت دیں اور کمائیں", referSub: "ہر دوست کے لیے بونس حاصل کریں!", copyBtn: "ریفرل لنک کاپی کریں", refListTitle: "کل ریفرلز:", payoutHeading: "USDT نکلوائیں", payoutNetwork: "نیٹ ورک: Binance Smart Chain (BEP20)", walletLabel: "BEP20 والٹ ایڈریس", amountLabel: "رقم درج کریں (USDT)", withdrawBtn: "رقم نکالنے کی درخواست دیں (کم از کم 1$)" }
+        };
+
+        function changeLanguage() {
+            const lang = document.getElementById('langSelect', this).value;
+            const t = translations[lang];
+            if (!t) return;
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (t[key]) el.innerText = t[key];
+            });
+        }
+
+        // Start App
+        renderTasks();
+        initUserInDB();
+    </script>
+</body>
+  </html>
